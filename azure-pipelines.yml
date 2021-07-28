@@ -1,0 +1,143 @@
+# File: azure-pipelines.yml
+
+trigger: none
+
+parameters:
+- name: target
+  type: string
+  values:
+  - dev
+  - prod
+
+- name: state
+  type: string
+  values:
+  - Deploy
+  - buildAndDeploy
+
+pool: 
+  name: xxx-eastus2-dev-build-vmss
+  demands:  
+  - Agent.ComputerName -equals 30294-eastus2-adoagent000000 
+
+variables:
+- group: xxx-nrpd-nifi-kv 
+
+stages:
+- ${{ if eq(parameters.target, 'dev') }}:
+  - ${{ if eq(parameters.state, 'Deploy') }}:
+    - stage: zkDevDeployment
+      displayName: dev zk deployment
+      jobs:  
+      - job: dev_zk
+        steps:
+        - template: zookeeper.yml
+          parameters:
+            repositoryName: famlidevacr.azurecr.io
+            nifi: nifi-dev
+            zk: zk-dev
+            containerRegistry: xxxdevacr
+            kubernetesServiceConnection: xxx-EastUs2-Dev-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+    - stage: nifiDevDeployment
+      displayName: dev nifi deployment
+      jobs:  
+      - job: dev_nifi
+        steps:
+        - template: nifi.yml
+          parameters:
+            repositoryName: xxxdevacr.azurecr.io
+            nifi: nifi-dev
+            zk: zk-dev
+            containerRegistry: xxxdevacr
+            kubernetesServiceConnection: xxx-EastUs2-Dev-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+  - ${{ if eq(parameters.state, 'buildAndDeploy') }}:
+    - stage: zkDevBuildAndDeployment
+      displayName: dev zk build and deployment
+      jobs:  
+      - job: dev_zk
+        steps:
+        - template: zookeeper.yml
+          parameters:
+            repositoryName: xxxdevacr.azurecr.io
+            nifi: nifi-dev
+            zk: zk-dev
+            containerRegistry: xxxdevacr
+            kubernetesServiceConnection: xxx-EastUs2-Dev-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+    - stage: nifiDevBuildAndDeployment
+      displayName: dev nifi build and deployment
+      jobs:  
+      - job: dev_nifi
+        steps:
+        - template: nifi.yml
+          parameters:
+            repositoryName: xxxdevacr.azurecr.io
+            nifi: nifi-dev
+            zk: zk-dev
+            containerRegistry: xxxdevacr
+            kubernetesServiceConnection: xxx-EastUs2-Dev-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+- ${{ if eq(parameters.target, 'prod') }}:
+  - ${{ if eq(parameters.state, 'Deploy') }}:
+    - stage: zkProdDeployment
+      displayName: prod zk deployment
+      jobs:  
+      - job: prod_zk
+        steps:
+        - template: zookeeper.yml
+          parameters:
+            repositoryName: xxxacr.azurecr.io
+            nifi: nifi-prod
+            zk: zk-prod
+            containerRegistry: prodacr
+            kubernetesServiceConnection: xxx-EastUs2-Prd-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+    - stage: nifiProdDeployment
+      displayName: prod nifi deployment
+      jobs:  
+      - job: prod_nifi
+        steps:
+        - template: nifi.yml
+          parameters:
+            repositoryName: xxxacr.azurecr.io
+            nifi: nifi-prod
+            zk: zk-prod
+            containerRegistry: prodacr
+            kubernetesServiceConnection: xxx-EastUs2-Prd-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+  - ${{ if eq(parameters.state, 'buildAndDeploy') }}:
+    - stage: zkProdBuildAndDeployment
+      displayName: prod zk build and deployment
+      jobs:  
+      - job: prod_zk
+        steps:
+        - template: zookeeper.yml
+          parameters:
+            repositoryName: xxxacr.azurecr.io
+            nifi: nifi-prod
+            zk: zk-prod
+            containerRegistry: prodacr
+            kubernetesServiceConnection: xxx-EastUs2-Prd-AKS-Cluster
+            state: '${{ parameters.state }}'
+
+    - stage: nifiProdBuildAndDeployment
+      displayName: prod nifi build and deployment
+      jobs:  
+      - job: prod_nifi
+        steps:
+        - template: nifi.yml
+          parameters:
+            repositoryName: xxxacr.azurecr.io
+            nifi: nifi-prod
+            zk: zk-prod
+            containerRegistry: prodacr
+            kubernetesServiceConnection: xxx-EastUs2-Prd-AKS-Cluster
+            state: '${{ parameters.state }}'
