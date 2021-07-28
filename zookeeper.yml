@@ -11,8 +11,10 @@ parameters:
   type: string
 - name: 'kubernetesServiceConnection'
   type: string
-  
-
+- name: 'azureSubscription'
+  type: string
+- name: 'prodAcr'
+  type: string
 steps:
 - ${{ if eq(parameters.state, 'buildAndDeploy') }}:
   - script: |
@@ -22,13 +24,13 @@ steps:
       echo '${{parameters.repositoryName }}'
       echo '${{parameters.containerRegistry }}'
       echo '${{parameters.kubernetesServiceConnection }}'
+      echo '${{parameters.azureSubscription }}'
     displayName: run as
 
-#steps:
     ###############################################
-    #                    Nifi                     #
-    #               Nifi     Nifi                 #
-    #                    Nifi                     #
+    #                    zk                       #
+    #               zk        zk                  #
+    #                    zk                       #
     ###############################################
 
   - task: Docker@2
@@ -73,6 +75,22 @@ steps:
       docker rmi ${{ parameters.repositoryName }}/${{ parameters.zk }}:$(Build.BuildNumber)
     displayName: Remove Last Build Image
 
+#   - script: |
+#       tag=$(Build.BuildNumber)
+#       imageNameandversion=${{ parameters.zk }}:$tag
+#       repositoryName=${{ parameters.repositoryName }}
+#       sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' zookeeper/manifests/zoo-keeper.yml
+#     displayName: Preparing the k8s deployment file
+
+  
+#   - task: KubernetesManifest@0
+#     displayName: kubernetes-deploy
+#     inputs:
+#       kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
+#       namespace: nifiall
+#       manifests: |
+#         zookeeper/manifests/zoo-keeper.yml
+
   - script: |
       tag=$(Build.BuildNumber)
       imageNameandversion=${{ parameters.zk }}:$tag
@@ -94,8 +112,6 @@ steps:
       manifests: |
         zookeeper/manifests/zoo-keeper.yml
 
-
-
 - ${{ if eq(parameters.state, 'Deploy') }}:
   - script: |
       echo "docker build and kubernetes deployment Running"
@@ -104,19 +120,28 @@ steps:
       echo '${{parameters.repositoryName }}'
       echo '${{parameters.containerRegistry }}'
       echo '${{parameters.kubernetesServiceConnection }}'
+      echo '${{parameters.azureSubscription }}'
     displayName: run as
 
   - task: AzureCLI@2
-    displayName: 'Azure CLI '
+    displayName: 'Azure docker registry last upload tag finds'
     inputs:
-      azureSubscription: 'ACC-NPRD-30294-FAMLI (30740a9c-8a80-444e-9b58-3b63529bfae4)'
+      azureSubscription: ${{ parameters.azureSubscription }} 
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
-        imageTag=`az acr repository show-tags -n demohacks --repository nginx  --orderby time_desc | sed 's/[][]//g' | sed 's/"//g' |cut -f1 -d"," | sed '/^$/d' |  sed 's/[[:space:]]//g' | head -n1` 
+        imageTag=`az acr repository show-tags -n ${{ parameters.containerRegistry }} --repository ${{ parameters.zk }} --orderby time_desc | sed 's/[][]//g' | sed 's/"//g' |cut -f1 -d"," | sed '/^$/d' |  sed 's/[[:space:]]//g' | head -n1` 
         imageNameandversion=${{ parameters.zk }}:$imageTag
         repositoryName=${{ parameters.repositoryName }}
+        echo $repositoryName
+        echo $imageNameandversion
         sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' zookeeper/manifests/zoo-keeper.yml
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: zookeeper/manifests/zoo-keeper.yml
+      artifact: drop-zk
+    displayName: Publish Pipeline Artifact
 
   - task: KubernetesManifest@0
     displayName: kubernetes-deploy
@@ -125,5 +150,3 @@ steps:
       namespace: nifiall
       manifests: |
         zookeeper/manifests/zoo-keeper.yml
-
- 
