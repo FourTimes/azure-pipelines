@@ -75,22 +75,6 @@ steps:
       docker rmi ${{ parameters.repositoryName }}/${{ parameters.zk }}:$(Build.BuildNumber)
     displayName: Remove Last Build Image
 
-#   - script: |
-#       tag=$(Build.BuildNumber)
-#       imageNameandversion=${{ parameters.zk }}:$tag
-#       repositoryName=${{ parameters.repositoryName }}
-#       sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' zookeeper/manifests/zoo-keeper.yml
-#     displayName: Preparing the k8s deployment file
-
-  
-#   - task: KubernetesManifest@0
-#     displayName: kubernetes-deploy
-#     inputs:
-#       kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
-#       namespace: nifiall
-#       manifests: |
-#         zookeeper/manifests/zoo-keeper.yml
-
   - script: |
       tag=$(Build.BuildNumber)
       imageNameandversion=${{ parameters.zk }}:$tag
