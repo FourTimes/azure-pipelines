@@ -11,9 +11,10 @@ parameters:
   type: string
 - name: 'kubernetesServiceConnection'
   type: string
-
-# variables:
-# - group: fml-nrpd-nifi-kv  
+- name: 'azureSubscription'
+  type: string
+- name: 'prodAcr'
+  type: string
 
 steps:
 - ${{ if eq(parameters.state, 'buildAndDeploy') }}:
@@ -24,9 +25,9 @@ steps:
       echo '${{parameters.repositoryName }}'
       echo '${{parameters.containerRegistry }}'
       echo '${{parameters.kubernetesServiceConnection }}'
+      echo '${{parameters.azureSubscription }}'
     displayName: run as
 
-#steps:
     ###############################################
     #                    Nifi                     #
     #               Nifi     Nifi                 #
@@ -82,31 +83,31 @@ steps:
       sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' nifi/manifests/nifi.yml
     displayName: Preparing the k8s deployment file
 
+  - task: replacetokens@3
+    displayName: Replace values
+    inputs:
+      rootDirectory: 'nifi'
+      targetFiles: 'manifests/nifi-configmap.yml'
+      encoding: 'auto'
+      writeBOM: true
+      actionOnMissing: 'warn'
+      keepToken: false
+      tokenPrefix: '@'
+      tokenSuffix: '@'
+      useLegacyPattern: false
+      enableTransforms: false
+      enableTelemetry: true
+
   - task: PublishPipelineArtifact@1
     inputs:
       targetPath: nifi/manifests/nifi-configmap.yml
-      artifact: drop-configmap
+      artifact: drop-nifi-configmap
     displayName: Publish Pipeline Artifact
-
-  - task: KubernetesManifest@0
-    displayName: kubernetes-deploy
-    inputs:
-      kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
-      namespace: nifiall
-      manifests: |
-        nifi/manifests/nifi-configmap.yml
-
-  - script: |
-      tag=$(Build.BuildNumber)
-      imageNameandversion=${{ parameters.nifi }}:$tag
-      repositoryName=${{ parameters.repositoryName }}
-      sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' nifi/manifests/nifi.yml
-    displayName: Preparing the k8s deployment file
 
   - task: PublishPipelineArtifact@1
     inputs:
-      targetPath: nifi/manifests/nifi.yml
-      artifact: drop-nifi
+      targetPath: nifi/manifests/nifi.yml  
+      artifact: drop-nifi-main
     displayName: Publish Pipeline Artifact
 
   - task: KubernetesManifest@0
@@ -114,10 +115,14 @@ steps:
     inputs:
       kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
       namespace: nifiall
-      manifests: |
-        nifi/manifests/nifi.yml
+      manifests: nifi/manifests/nifi-configmap.yml
 
-
+  - task: KubernetesManifest@0
+    displayName: kubernetes-deploy
+    inputs:
+      kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
+      namespace: nifiall
+      manifests: nifi/manifests/nifi.yml 
 
 - ${{ if eq(parameters.state, 'Deploy') }}:
   - script: |
@@ -126,7 +131,9 @@ steps:
       echo '${{parameters.zk }}'
       echo '${{parameters.repositoryName }}'
       echo '${{parameters.containerRegistry }}'
+      echo '${{parameters.azureSubscription }}'
       echo '${{parameters.kubernetesServiceConnection }}'
+      echo '${{parameters.prodAcr }}'
     displayName: run as
 
   - task: replacetokens@3
@@ -144,18 +151,42 @@ steps:
       enableTransforms: false
       enableTelemetry: true
 
-  - task: KubernetesManifest@0
-    displayName: kubernetes-deploy
+  - task: AzureCLI@2
+    displayName: 'Azure docker registry last upload tag finds'
     inputs:
-      kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
-      namespace: nifiall
-      manifests: |
-        nifi/manifests/nifi-configmap.yml
+      azureSubscription: ${{ parameters.azureSubscription }} 
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        imageTag=`az acr repository show-tags -n ${{ parameters.prodAcr }} --repository ${{ parameters.nifi }} --orderby time_desc | sed 's/[][]//g' | sed 's/"//g' |cut -f1 -d"," | sed '/^$/d' |  sed 's/[[:space:]]//g' | head -n1` 
+        imageNameandversion=${{ parameters.zk }}:$imageTag
+        repositoryName=${{ parameters.repositoryName }}
+        echo $repositoryName
+        echo $imageNameandversion
+        sed -i 's/containerImageName/'"$repositoryName\/$imageNameandversion"'/g' nifi/manifests/nifi.yml
+        
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: nifi/manifests/nifi-configmap.yml
+      artifact: drop-nifi-configmap
+    displayName: Publish Pipeline Artifact
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: nifi/manifests/nifi.yml  
+      artifact: drop-nifi-main
+    displayName: Publish Pipeline Artifact
 
   - task: KubernetesManifest@0
     displayName: kubernetes-deploy
     inputs:
       kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
       namespace: nifiall
-      manifests: |
-        nifi/manifests/nifi.yml        
+      manifests: nifi/manifests/nifi-configmap.yml
+
+  - task: KubernetesManifest@0
+    displayName: kubernetes-deploy
+    inputs:
+      kubernetesServiceConnection: ${{ parameters.kubernetesServiceConnection }}
+      namespace: nifiall
+      manifests: nifi/manifests/nifi.yml        
